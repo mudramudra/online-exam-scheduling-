@@ -1,0 +1,294 @@
+import java.util.*;
+
+public class OnlineExamScheduler {
+
+    static class Submission {
+        int id, arrival, burst, remaining;
+        int waiting, turnaround, completion;
+
+        Submission(int id, int arrival, int burst) {
+            this.id = id;
+            this.arrival = arrival;
+            this.burst = burst;
+            remaining = burst;
+        }
+    }
+
+    static Scanner sc = new Scanner(System.in);
+
+    // Store and display Gantt Chart
+    static void addGantt(ArrayList<String> chart,
+                         ArrayList<Integer> start,
+                         ArrayList<Integer> end,
+                         String name, int a, int b) {
+        if (name.equals("IDLE") && !chart.isEmpty()
+                && chart.get(chart.size() - 1).equals("IDLE")) {
+            end.set(end.size() - 1, b);
+        } else {
+            chart.add(name);
+            start.add(a);
+            end.add(b);
+        }
+    }
+
+    static void showGantt(ArrayList<String> chart,
+                          ArrayList<Integer> start,
+                          ArrayList<Integer> end) {
+        System.out.println("\nGantt Chart:");
+
+        for (int i = 0; i < chart.size(); i++) {
+            System.out.print("| " + chart.get(i) + " ");
+        }
+        System.out.println("|");
+
+        if (!chart.isEmpty()) {
+            System.out.print(start.get(0));
+
+            for (int i = 0; i < end.size(); i++) {
+                System.out.print("\t" + end.get(i));
+            }
+            System.out.println();
+        }
+    }
+
+    static void display(String name, ArrayList<Submission> list) {
+        double wt = 0, tat = 0;
+
+        System.out.println("\n" + name);
+        System.out.println("ID\tArrival\tBurst\tWaiting\tTurnaround");
+
+        for (Submission s : list) {
+            System.out.println("S" + s.id + "\t" + s.arrival
+                    + "\t" + s.burst + "\t" + s.waiting
+                    + "\t" + s.turnaround);
+
+            wt += s.waiting;
+            tat += s.turnaround;
+        }
+
+        System.out.printf("Average Waiting Time: %.2f\n",
+                wt / list.size());
+        System.out.printf("Average Turnaround Time: %.2f\n",
+                tat / list.size());
+    }
+
+    static ArrayList<Submission> copy(ArrayList<Submission> data) {
+        ArrayList<Submission> list = new ArrayList<>();
+
+        for (Submission s : data) {
+            list.add(new Submission(s.id, s.arrival, s.burst));
+        }
+
+        return list;
+    }
+
+    // FCFS Scheduling
+    static void fcfs(ArrayList<Submission> data) {
+        ArrayList<Submission> list = copy(data);
+
+        list.sort(Comparator.comparingInt(s -> s.arrival));
+
+        ArrayList<String> chart = new ArrayList<>();
+        ArrayList<Integer> start = new ArrayList<>();
+        ArrayList<Integer> end = new ArrayList<>();
+
+        int time = 0;
+
+        for (Submission s : list) {
+            if (time < s.arrival) {
+                addGantt(chart, start, end, "IDLE",
+                        time, s.arrival);
+                time = s.arrival;
+            }
+
+            int begin = time;
+            s.waiting = time - s.arrival;
+            time += s.burst;
+            s.completion = time;
+            s.turnaround = time - s.arrival;
+
+            addGantt(chart, start, end, "S" + s.id, begin, time);
+        }
+
+        showGantt(chart, start, end);
+        display("FCFS Result", list);
+    }
+
+    // SJF Non-preemptive Scheduling
+    static void sjf(ArrayList<Submission> data) {
+        ArrayList<Submission> list = copy(data);
+
+        int n = list.size(), time = 0, completed = 0;
+        boolean[] done = new boolean[n];
+
+        ArrayList<String> chart = new ArrayList<>();
+        ArrayList<Integer> start = new ArrayList<>();
+        ArrayList<Integer> end = new ArrayList<>();
+
+        while (completed < n) {
+            int index = -1;
+
+            for (int i = 0; i < n; i++) {
+                Submission s = list.get(i);
+
+                if (!done[i] && s.arrival <= time &&
+                    (index == -1 ||
+                     s.burst < list.get(index).burst)) {
+                    index = i;
+                }
+            }
+
+            if (index == -1) {
+                addGantt(chart, start, end, "IDLE",
+                        time, time + 1);
+                time++;
+                continue;
+            }
+
+            Submission s = list.get(index);
+            int begin = time;
+
+            s.waiting = time - s.arrival;
+            time += s.burst;
+            s.completion = time;
+            s.turnaround = time - s.arrival;
+
+            addGantt(chart, start, end, "S" + s.id, begin, time);
+
+            done[index] = true;
+            completed++;
+        }
+
+        showGantt(chart, start, end);
+        display("SJF Result", list);
+    }
+
+    // Round Robin Scheduling
+    static void roundRobin(ArrayList<Submission> data, int quantum) {
+        ArrayList<Submission> list = copy(data);
+
+        Queue<Integer> q = new LinkedList<>();
+        boolean[] added = new boolean[list.size()];
+
+        ArrayList<String> chart = new ArrayList<>();
+        ArrayList<Integer> start = new ArrayList<>();
+        ArrayList<Integer> end = new ArrayList<>();
+
+        int time = 0, completed = 0, n = list.size();
+
+        while (completed < n) {
+            for (int i = 0; i < n; i++) {
+                if (!added[i] && list.get(i).arrival <= time) {
+                    q.add(i);
+                    added[i] = true;
+                }
+            }
+
+            if (q.isEmpty()) {
+                addGantt(chart, start, end, "IDLE",
+                        time, time + 1);
+                time++;
+                continue;
+            }
+
+            int index = q.poll();
+            Submission s = list.get(index);
+
+            int begin = time;
+            int run = Math.min(quantum, s.remaining);
+
+            time += run;
+            s.remaining -= run;
+
+            addGantt(chart, start, end, "S" + s.id, begin, time);
+
+            for (int i = 0; i < n; i++) {
+                if (!added[i] && list.get(i).arrival <= time) {
+                    q.add(i);
+                    added[i] = true;
+                }
+            }
+
+            if (s.remaining > 0) {
+                q.add(index);
+            } else {
+                s.completion = time;
+                s.turnaround = time - s.arrival;
+                s.waiting = s.turnaround - s.burst;
+                completed++;
+            }
+        }
+
+        showGantt(chart, start, end);
+        display("Round Robin Result", list);
+    }
+
+    public static void main(String[] args) {
+        ArrayList<Submission> list = new ArrayList<>();
+
+        System.out.println("ONLINE EXAM PROCESSING SCHEDULER");
+        System.out.print("Enter number of submissions: ");
+        int n = sc.nextInt();
+
+        if (n <= 0) {
+            System.out.println("Invalid number of submissions.");
+            return;
+        }
+
+        for (int i = 1; i <= n; i++) {
+            System.out.println("\nSubmission S" + i);
+
+            System.out.print("Arrival time: ");
+            int arrival = sc.nextInt();
+
+            System.out.print("Processing time: ");
+            int burst = sc.nextInt();
+
+            if (arrival < 0 || burst <= 0) {
+                System.out.println("Invalid input.");
+                return;
+            }
+
+            list.add(new Submission(i, arrival, burst));
+        }
+
+        while (true) {
+            System.out.println("\n1. FCFS");
+            System.out.println("2. SJF");
+            System.out.println("3. Round Robin");
+            System.out.println("4. Exit");
+            System.out.print("Enter choice: ");
+
+            int choice = sc.nextInt();
+
+            switch (choice) {
+                case 1:
+                    fcfs(list);
+                    break;
+
+                case 2:
+                    sjf(list);
+                    break;
+
+                case 3:
+                    System.out.print("Enter time quantum: ");
+                    int quantum = sc.nextInt();
+
+                    if (quantum > 0)
+                        roundRobin(list, quantum);
+                    else
+                        System.out.println("Quantum must be positive.");
+                    break;
+
+                case 4:
+                    System.out.println("Scheduler closed.");
+                    sc.close();
+                    return;
+
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+}
+    
